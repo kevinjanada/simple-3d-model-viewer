@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
 
+
 class ModelViewer {
   /**
    * @constructor
@@ -20,6 +21,7 @@ class ModelViewer {
     this.mouse = null
     this.modelsDict = {}
     this.animate = this.animate.bind(this)
+    this.onMouseMove = this.onMouseMove.bind(this)
     this.animationHandle = null
 
     if(domElement) {
@@ -46,6 +48,7 @@ class ModelViewer {
     this.container.appendChild(this.renderer.domElement)
     this.orbitControls = initializeOrbitControls(this.camera, this.renderer)
     this.mouse = new THREE.Vector2()
+    document.addEventListener('mousemove', this.trackMousePosition, false)
   }
 
   render () {
@@ -56,6 +59,12 @@ class ModelViewer {
     this.animationHandle = requestAnimationFrame(this.animate)
     this.render()
     this.orbitControls.update()
+  }
+
+  trackMousePosition(event) {
+    event.preventDefault()
+    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1
+    this.mouse.y = (event.clientY / window.innerHeight) * 2 - 1
   }
 
   centerCameraToObject(modelKey, offset) {
