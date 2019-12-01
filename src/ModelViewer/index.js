@@ -2,7 +2,6 @@ import * as THREE from 'three'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
 
-
 class ModelViewer {
   /**
    * @constructor
@@ -21,7 +20,7 @@ class ModelViewer {
     this.mouse = null
     this.modelsDict = {}
     this.animate = this.animate.bind(this)
-    this.onMouseMove = this.onMouseMove.bind(this)
+    this.trackMousePosition = this.trackMousePosition.bind(this)
     this.animationHandle = null
 
     if(domElement) {
@@ -37,7 +36,7 @@ class ModelViewer {
       this.containerHeight = window.innerHeight - 20
     }
 
-    this.camera = new THREE.PerspectiveCamera(70, this.containerWidth / this.containerHeight, 1, 500)
+    this.camera = new THREE.PerspectiveCamera(70, this.containerWidth / this.containerHeight, 1, 2000)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xf0f0f0)
     this.light = new THREE.DirectionalLight(0xffffff, 1)
@@ -67,14 +66,18 @@ class ModelViewer {
     this.mouse.y = (event.clientY / window.innerHeight) * 2 - 1
   }
 
+  centerToObject(modelKey, offset) {
+    const boundingBox = new THREE.Box3()
+  }
+
   centerCameraToObject(modelKey, offset) {
-    offset = offset || -50;
+    offset = offset || 5;
     const boundingBox = new THREE.Box3()
     const object = this.modelsDict[modelKey]
     boundingBox.setFromObject(object)
     const center = boundingBox.getCenter()
     const size = boundingBox.getSize()
-
+    
     // get the max side of the bounding box (fits to width OR height as needed )
     const maxDim = Math.max( size.x, size.y, size.z );
     const fov = this.camera.fov * ( Math.PI / 180 );
@@ -83,19 +86,23 @@ class ModelViewer {
     this.camera.position.z = center.z + cameraZ
     const minZ = boundingBox.min.z;
     const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
-    this.camera.far = cameraToFarEdge * 3;
+    this.camera.far = cameraToFarEdge * 5;
     this.camera.updateProjectionMatrix();
     if ( this.orbitControls ) {
       // set camera to rotate around center of loaded object
       this.orbitControls.target = center;
       // prevent camera from zooming out far enough to create far plane cutoff
-      this.orbitControls.maxDistance = cameraToFarEdge;
+      this.orbitControls.maxDistance = cameraToFarEdge * 2;
       this.orbitControls.saveState();
     } else {
       this.camera.lookAt( center )
     }
   }
   
+  /** 
+   * @function setDefaultRotation -- Rotate 90 degrees on x axis. Perlu kalau export fbx langsung dari navisworks
+   * @param {modelKey} string -- The key that was passed in to loadFBX method when loading the model 
+  */
   setDefaultRotation(modelKey) {
     var quaternion = new THREE.Quaternion()
     // Rotate on x axis, -90 degrees or -(pi/2) radian
@@ -106,7 +113,7 @@ class ModelViewer {
   async loadFBX (modelPath, modelKey) {
     const model = await fbxModelLoader(modelPath)
     this.modelsDict[modelKey] = model
-    this.setDefaultRotation(modelKey)
+    // this.setDefaultRotation(modelKey)
     this.centerCameraToObject(modelKey)
     this.scene.add(model)
   }
