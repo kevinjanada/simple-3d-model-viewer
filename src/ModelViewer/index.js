@@ -3,6 +3,10 @@ import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
 import ColorMenu from './ColorMenu'
 
+function hexStringToInt(hexString) {
+  return parseInt(hexString.replace(/^#/, ''), 16)
+}
+
 class ModelViewer {
   /**
    * @constructor
@@ -25,6 +29,8 @@ class ModelViewer {
     this.mouseDownTimer = null;
     // The object currently raycasted
     this.intersectedObject = null;
+    // The object that was last raycasted when click event fired
+    this.clickedObject = null;
     // To pause and start the animation
     this.animationHandle = null
     // Window Menu to show when mouse clicked at object
@@ -75,7 +81,7 @@ class ModelViewer {
       this.pointLight.position.copy(this.camera.position)
     })
     this.raycaster = new THREE.Raycaster()
-    this.colorMenu = new ColorMenu(this.canvas)
+    this.colorMenu = new ColorMenu(this.canvas, null, this.handleMenuItemClick)
 
     // Event Listeners
     document.addEventListener('mousedown', this.handleMouseDown)
@@ -99,6 +105,10 @@ class ModelViewer {
     this.orbitControls.update()
   }
 
+  /**
+   * Set the mouse position relative to the window position
+   * @param {DOMEvent object} event 
+   */
   setMouseWindowPosition(event) {
     event.preventDefault()
     this.mouseWindowPosition.x = event.clientX;
@@ -158,6 +168,16 @@ class ModelViewer {
     }
   }
 
+  setClickedObject() {
+    if(this.intersectedObject && !this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
+      this.clickedObject = this.intersectedObject
+    } else {
+      if (!this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
+        this.clickedObject = null
+      }
+    }
+  }
+
   handleShowMenu() {
     if (this.intersectedObject) {
       this.colorMenu.show(this.mouseWindowPosition)
@@ -169,13 +189,14 @@ class ModelViewer {
     }
   }
 
-  handleMenuItemClick() {
-
+  handleMenuItemClick(val) {
+    const hex = hexStringToInt(val.hex)
+    this.markObject(hex)
   }
 
-  markObject() {
-    if (this.intersectedObject) {
-      this.intersectedObject.material.emissive.setHex(0xFF0000);
+  markObject(color) {
+    if (this.clickedObject) {
+      this.clickedObject.material.emissive.setHex(color);
     }
   }
 
@@ -250,7 +271,7 @@ class ModelViewer {
 
   handleMouseUp(event) {
     const timeElapsed = new Date() - this.mouseDownTimer
-    if (timeElapsed < 300) { 
+    if (timeElapsed < 200) { 
       // Mouse is clicked 
       this.handleClick(event)
     } else {
@@ -265,7 +286,7 @@ class ModelViewer {
    */
   handleClick(event) {
     event.preventDefault()
-    // TODO: Check if Mouse is over the menu
+    this.setClickedObject()
     this.handleShowMenu()
   }
 }

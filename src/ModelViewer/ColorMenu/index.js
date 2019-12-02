@@ -6,6 +6,11 @@ const DEFAULT_COLORS = [
   { hex: '#ffffff', description: 'Clear Color'}
 ]
 const MENU_ITEM_HEIGHT = 42
+const defaultMenuItemClickHandler = (val) => {
+  console.log('This is the default click handler for menu item')
+  console.log('Assign a custom click handler function as the third parameter of ColorMenu constructor')
+  console.log(val)
+}
 
 class ColorMenu {
   /**
@@ -20,7 +25,7 @@ class ColorMenu {
     this.menuElement = null
     this.menuElementWidth = 0
     this.menuElementHeight = 0
-    this.menuItemClickHandler = (val) => console.log(val)
+    this.menuItemClickHandler = defaultMenuItemClickHandler
     this.init = this.init.bind(this)
     this.initializeMenuItems = this.initializeMenuItems.bind(this)
     this.computeMenuElementAnchorPosition = this.computeMenuElementAnchorPosition.bind(this)
@@ -36,8 +41,9 @@ class ColorMenu {
       this.container = document.body
     }
 
-    if (menuItemClickHandler) { this.menuItemClickHandler = menuItemClickHandler }
-    else { this.menuItemClickHandler = (val) => console.log(val) } 
+    if (menuItemClickHandler) { 
+      this.menuItemClickHandler = menuItemClickHandler
+    }
 
     this.init()
   }
@@ -68,8 +74,9 @@ class ColorMenu {
       text.style.margin = 0
 
       el.appendChild(text)
+      const classContext = this
       el.addEventListener('click', function(event) {
-        console.log('jajaj')
+        classContext.menuItemClickHandler(c)
       })
       this.menuElement.appendChild(el)
     })
