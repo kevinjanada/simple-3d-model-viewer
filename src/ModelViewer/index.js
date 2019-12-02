@@ -162,7 +162,10 @@ class ModelViewer {
     if (this.intersectedObject) {
       this.colorMenu.show(this.mouseWindowPosition)
     } else {
-      this.colorMenu.hide()
+      // FIXME: Maybe this if logic should be in ColorMenu class instead
+      if (!this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
+        this.colorMenu.hide()
+      }
     }
   }
 
@@ -252,6 +255,7 @@ class ModelViewer {
       this.handleClick(event)
     } else {
       // Mouse is held down
+      this.colorMenu.hide()
     }
   }
 

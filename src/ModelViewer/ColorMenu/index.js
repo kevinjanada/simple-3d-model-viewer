@@ -79,7 +79,11 @@ class ColorMenu {
    * @param {object: {x: number, y: number}} mouseWindowPosition 
    */
   show(mouseWindowPosition) {
-    if (this.menuElement.style.display === 'none') {
+    /** 
+     * Check if mouse is currently hovering on the menuElement
+     * If we dont check it first, it will reset the menuElement position to current mouse position
+     * */
+    if (!this.isMouseOnMenu(mouseWindowPosition)) { 
       const { top, left } = this.computeMenuElementAnchorPosition(mouseWindowPosition)
       this.menuElement.style.top = `${top}px`
       this.menuElement.style.left = `${left}px`
