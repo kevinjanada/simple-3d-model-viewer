@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
+import ColorMenu from './ColorMenu'
 
 class ModelViewer {
   /**
@@ -8,62 +9,83 @@ class ModelViewer {
    * @param {domElement?} - if provided will use it to render scene, else will render to whole window
    */
   constructor(domElement) {
-    this.container = null;
-    this.containerWidth = 0
-    this.containerHeight = 0
+    this.canvas = null;
+    this.canvasWidth = 0
+    this.canvasHeight = 0
     this.camera = null;
     this.scene = null;
     this.light = null;
+    this.pointLight = null;
     this.renderer = null;
     this.modelsDict = {}
     this.orbitControls = null;
     this.raycaster = null;
-    this.mousePosition = {x: 0, y: 0};
+    this.mouseCanvasPosition = {x: 0, y: 0};
+    this.mouseWindowPosition = {x: 0, y: 0};
+    this.mouseDownTimer = null;
     // The object currently raycasted
     this.intersectedObject = null;
     // To pause and start the animation
     this.animationHandle = null
+    // Window Menu to show when mouse clicked at object
+    this.colorMenu = null
     
     // Bind methods context to this
     this.animate = this.animate.bind(this)
     this.raycast = this.raycast.bind(this)
     this.markObject = this.markObject.bind(this)
-    this.getContainerRelativePosition = this.getContainerRelativePosition.bind(this)
-    this.setMousePosition = this.setMousePosition.bind(this)
-    this.clearMousePosition = this.clearMousePosition.bind(this)
+    this.getCanvasRelativePosition = this.getCanvasRelativePosition.bind(this)
+    this.setMouseCanvasPosition = this.setMouseCanvasPosition.bind(this)
+    this.clearMouseCanvasPosition = this.clearMouseCanvasPosition.bind(this)
+    this.setMouseWindowPosition = this.setMouseWindowPosition.bind(this)
+    this.handleMouseDown = this.handleMouseDown.bind(this)
+    this.handleMouseUp = this.handleMouseUp.bind(this)
+    this.handleClick = this.handleClick.bind(this)
+    this.handleShowMenu = this.handleShowMenu.bind(this)
+    this.handleMenuItemClick = this.handleMenuItemClick.bind(this)
 
     // Setup
     if(domElement) {
       // render to domElement
-      this.container = domElement
-      this.containerWidth = domElement.offsetWidth - 16;
-      this.containerHeight = domElement.offsetHeight;
+      this.canvas = domElement
+      this.canvasWidth = domElement.offsetWidth - 16;
+      this.canvasHeight = domElement.offsetHeight;
     } else {
       // render to body
-      this.container = document.createElement('div')
-      document.body.appendChild(this.container)
-      this.containerWidth = window.innerWidth - 20
-      this.containerHeight = window.innerHeight - 20
+      this.canvas = document.createElement('div')
+      document.body.appendChild(this.canvas)
+      this.canvasWidth = window.innerWidth - 20
+      this.canvasHeight = window.innerHeight - 20
     }
-    this.camera = new THREE.PerspectiveCamera(70, this.containerWidth / this.containerHeight, 1, 2000)
+    this.camera = new THREE.PerspectiveCamera(70, this.canvasWidth / this.canvasHeight, 1, 2000)
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf0f0f0)
-    this.light = new THREE.DirectionalLight(0xffffff, 1)
-    this.scene.add(this.light)
+    this.scene.background = new THREE.Color(0x787878)
+    //this.light = new THREE.DirectionalLight(0xffffff, 0.5)
+    //this.scene.add(this.light)
+    this.pointLight = new THREE.PointLight(0xFFFFFF)
+    this.pointLight.position.set(1,1,-2)
+    this.scene.add(this.pointLight)
+    // this.camera.add(this.pointLight)
     this.renderer = new THREE.WebGLRenderer()
     this.renderer.setPixelRatio(window.devicePixelRatio)
-    this.renderer.setSize(this.containerWidth, this.containerHeight)
-    this.container.appendChild(this.renderer.domElement)
+    this.renderer.setSize(this.canvasWidth, this.canvasHeight)
+    this.canvas.appendChild(this.renderer.domElement)
     this.orbitControls = initializeOrbitControls(this.camera, this.renderer)
+    this.orbitControls.addEventListener('change', () => {
+      this.pointLight.position.copy(this.camera.position)
+    })
     this.raycaster = new THREE.Raycaster()
+    this.colorMenu = new ColorMenu(this.canvas)
 
     // Event Listeners
-    document.addEventListener('click', this.markObject)
-    document.addEventListener('mousemove', this.setMousePosition)
-    document.addEventListener('mouseout', this.clearMousePosition)
-    document.addEventListener('mouseleave', this.clearMousePosition)
-    this.container.addEventListener('mouseenter', this.onMouseEnterCanvas) // TODO: Implement this
-    this.container.addEventListener('mouseleave', this.onMouseLeaveCanvas) // TODO: Implement this
+    document.addEventListener('mousedown', this.handleMouseDown)
+    document.addEventListener('mouseup', this.handleMouseUp)
+    document.addEventListener('mousemove', this.setMouseCanvasPosition)
+    document.addEventListener('mousemove', this.setMouseWindowPosition)
+    document.addEventListener('mouseout', this.clearMouseCanvasPosition)
+    document.addEventListener('mouseleave', this.clearMouseCanvasPosition)
+    this.canvas.addEventListener('mouseenter', this.onMouseEnterCanvas) // TODO: Implement this
+    this.canvas.addEventListener('mouseleave', this.onMouseLeaveCanvas) // TODO: Implement this
   }
 
   render () {
@@ -77,12 +99,18 @@ class ModelViewer {
     this.orbitControls.update()
   }
 
+  setMouseWindowPosition(event) {
+    event.preventDefault()
+    this.mouseWindowPosition.x = event.clientX;
+    this.mouseWindowPosition.y = event.clientY;
+  }
+
   /**
    * Get the x and y of canvas element
    * @param {DOMEvent object} event 
    */
-  getContainerRelativePosition(event) {
-    const rect = this.container.getBoundingClientRect()
+  getCanvasRelativePosition(event) {
+    const rect = this.canvas.getBoundingClientRect()
     return {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top
@@ -95,10 +123,10 @@ class ModelViewer {
    * this.mousePosition.x == -1 <= x <= 1 
    * this.mousePosition.y == -1 <= y <= 1
    */
-  setMousePosition(event) {
-    const pos = this.getContainerRelativePosition(event);
-    this.mousePosition.x = (pos.x / this.container.clientWidth ) *  2 - 1;
-    this.mousePosition.y = (pos.y / this.container.clientHeight) * -2 + 1;  // note we flip Y
+  setMouseCanvasPosition(event) {
+    const pos = this.getCanvasRelativePosition(event);
+    this.mouseCanvasPosition.x = (pos.x / this.canvas.clientWidth ) *  2 - 1;
+    this.mouseCanvasPosition.y = (pos.y / this.canvas.clientHeight) * -2 + 1;  // note we flip Y
   }
 
   /**
@@ -107,9 +135,9 @@ class ModelViewer {
    * to stop raycasting. For now we just pick a value
    * unlikely to pick something
    */
-  clearMousePosition() {
-    this.mousePosition.x = -100000;
-    this.mousePosition.y = -100000;
+  clearMouseCanvasPosition() {
+    this.mouseCanvasPosition.x = -100000;
+    this.mouseCanvasPosition.y = -100000;
   }
 
   /**
@@ -117,19 +145,29 @@ class ModelViewer {
    */
   raycast() {
      // cast a ray through the frustum
-    this.raycaster.setFromCamera(this.mousePosition, this.camera);
+    this.raycaster.setFromCamera(this.mouseCanvasPosition, this.camera);
     // get the list of objects the ray intersected
     const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
     if (intersectedObjects.length > 0) {
       // pick the first object. It's the closest one
       this.intersectedObject = intersectedObjects[0].object;
-      // save its color
-      // this.pickedObjectSavedColor = this.pickedObject.material.emissive.getHex();
-      // set its emissive color to flashing red/yellow
-      // this.pickedObject.material.emissive.setHex(0xFF0000);
+      // TODO: Add Outline Highlight to intersectedObject
     } else {
+      // TODO: Remove Outline Highlight to intersectedObject
       this.intersectedObject = null;
     }
+  }
+
+  handleShowMenu() {
+    if (this.intersectedObject) {
+      this.colorMenu.show(this.mouseWindowPosition)
+    } else {
+      this.colorMenu.hide()
+    }
+  }
+
+  handleMenuItemClick() {
+
   }
 
   markObject() {
@@ -178,12 +216,53 @@ class ModelViewer {
     this.modelsDict[modelKey].applyQuaternion(quaternion)
   }
 
+  setDefaultObjectMaterial(modelKey) {
+    this.modelsDict[modelKey].traverse(child => {
+      if (child.isMesh) {
+        // switch the material here - you'll need to take the settings from the 
+        //original material, or create your own new settings, something like:
+        const oldMat = child.material;
+        child.material = new THREE.MeshLambertMaterial({  
+          color: 0xFFFFFF,
+          map: oldMat.map,
+          //etc
+        });
+      }
+    })
+  }
+
   async loadFBX (modelPath, modelKey) {
     const model = await fbxModelLoader(modelPath)
     this.modelsDict[modelKey] = model
+    this.setDefaultObjectMaterial(modelKey)
     // this.setDefaultRotation(modelKey)
     this.centerCameraToObject(modelKey)
     this.scene.add(model)
+  }
+
+  handleMouseDown(event) {
+    // Set timer start at mouse down
+    this.mouseDownTimer = new Date()
+  }
+
+  handleMouseUp(event) {
+    const timeElapsed = new Date() - this.mouseDownTimer
+    if (timeElapsed < 300) { 
+      // Mouse is clicked 
+      this.handleClick(event)
+    } else {
+      // Mouse is held down
+    }
+  }
+
+  /**
+   * Put methods that need to run on click event here
+   * @param {DOMEvent object} event 
+   */
+  handleClick(event) {
+    event.preventDefault()
+    // TODO: Check if Mouse is over the menu
+    this.handleShowMenu()
   }
 }
 
