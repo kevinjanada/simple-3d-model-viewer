@@ -32,7 +32,7 @@ class ModelViewer {
     // The object that was last raycasted when click event fired
     this.clickedObject = null;
     // To pause and start the animation
-    this.animationHandle = null
+    this.animationID = null
     // Flag to check if modelviewer is currently animating
     this.isAnimating = false
     // Window Menu to show when mouse clicked at object
@@ -54,7 +54,9 @@ class ModelViewer {
     this.handleMouseEnterCanvas = this.handleMouseEnterCanvas.bind(this)
     this.handleMouseLeaveCanvas = this.handleMouseLeaveCanvas.bind(this)
 
-    // Setup
+    /* ==========================
+     * Setup
+     * =========================*/
     if(domElement) {
       // render to domElement
       this.canvas = domElement
@@ -67,23 +69,16 @@ class ModelViewer {
       this.canvasWidth = window.innerWidth - 20
       this.canvasHeight = window.innerHeight - 20
     }
-    this.camera = new THREE.PerspectiveCamera(70, this.canvasWidth / this.canvasHeight, 1, 2000)
+    this.camera = new THREE.PerspectiveCamera(70, this.canvasWidth / this.canvasHeight, 1, 500)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x787878)
-    //this.light = new THREE.DirectionalLight(0xffffff, 0.5)
-    //this.scene.add(this.light)
-    this.pointLight = new THREE.PointLight(0xFFFFFF)
-    this.pointLight.position.set(1,1,-2)
-    this.scene.add(this.pointLight)
-    // this.camera.add(this.pointLight)
+    this.light = new THREE.HemisphereLight(0xffffff, 0x080820, 0.7)
+    this.scene.add(this.light)
     this.renderer = new THREE.WebGLRenderer()
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(this.canvasWidth, this.canvasHeight)
     this.canvas.appendChild(this.renderer.domElement)
     this.orbitControls = initializeOrbitControls(this.camera, this.renderer)
-    this.orbitControls.addEventListener('change', () => {
-      this.pointLight.position.copy(this.camera.position)
-    })
     this.raycaster = new THREE.Raycaster()
     this.colorMenu = new ColorMenu(this.canvas, null, this.handleMenuItemClick)
 
@@ -101,13 +96,18 @@ class ModelViewer {
   render () {
     this.raycast()
     this.renderer.render(this.scene, this.camera)
+    this.orbitControls.update()
+    this.setLightToFollowCamera()
   }
 
   animate () {
-    this.animationHandle = requestAnimationFrame(this.animate)
+    this.isAnimating = true
+    this.animationID = requestAnimationFrame(this.animate)
     this.render()
-    this.modelsDict['tanks'].x += 100
-    this.orbitControls.update()
+  }
+
+  setLightToFollowCamera() {
+    this.light.position.copy(this.camera.position)
   }
 
   /**
@@ -176,6 +176,7 @@ class ModelViewer {
   setClickedObject() {
     if(this.intersectedObject && !this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
       this.clickedObject = this.intersectedObject
+      console.log(this.clickedObject)
     } else {
       if (!this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
         this.clickedObject = null
@@ -201,7 +202,7 @@ class ModelViewer {
 
   markObject(color) {
     if (this.clickedObject) {
-      this.clickedObject.material.emissive.setHex(color);
+      this.clickedObject.material.color.setHex(color)
     }
   }
 
@@ -221,13 +222,13 @@ class ModelViewer {
     this.camera.position.z = center.z + cameraZ
     const minZ = boundingBox.min.z;
     const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
-    this.camera.far = cameraToFarEdge * 5;
+    this.camera.far = cameraToFarEdge * 10;
     this.camera.updateProjectionMatrix();
     if ( this.orbitControls ) {
       // set camera to rotate around center of loaded object
       this.orbitControls.target = center;
       // prevent camera from zooming out far enough to create far plane cutoff
-      this.orbitControls.maxDistance = cameraToFarEdge * 2;
+      this.orbitControls.maxDistance = cameraToFarEdge * 10;
       this.orbitControls.saveState();
     } else {
       this.camera.lookAt( center )
@@ -264,17 +265,17 @@ class ModelViewer {
     const model = await fbxModelLoader(modelPath)
     this.modelsDict[modelKey] = model
     this.setDefaultObjectMaterial(modelKey)
-    // this.setDefaultRotation(modelKey)
-    this.centerCameraToObject(modelKey)
     this.scene.add(model)
   }
 
   handleMouseDown(event) {
+    event.preventDefault()
     // Set timer start at mouse down
     this.mouseDownTimer = new Date()
   }
 
   handleMouseUp(event) {
+    event.preventDefault()
     const timeElapsed = new Date() - this.mouseDownTimer
     if (timeElapsed < 200) { 
       // Mouse is clicked 
@@ -297,14 +298,14 @@ class ModelViewer {
 
   handleMouseEnterCanvas() {
     if (this.isAnimating === false) {
-      requestAnimationFrame(this.animate)
+      this.animationID = requestAnimationFrame(this.animate)
       this.isAnimating = true
     }
   }
 
-  handleMouseLeaveCanvas() { // FIXME: cancelAnimationFrame not working, maybe not getting the right ID in this.animationHandle
+  handleMouseLeaveCanvas() { // FIXME: cancelAnimationFrame not working, maybe not getting the right ID in this.animationID
     this.isAnimating = false
-    cancelAnimationFrame(this.animationHandle)
+    cancelAnimationFrame(this.animationID)
   }
 }
 

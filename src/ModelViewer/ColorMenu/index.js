@@ -1,7 +1,7 @@
 const DEFAULT_COLORS = [
   { hex: '#ab0707', description: 'High' },
   { hex: '#c78a06', description: 'Medium High' },
-  { hex: '#f0df5d', description: 'Medium' },
+  { hex: '#eddb4e', description: 'Medium' },
   { hex: '#81db32', description: 'Low' },
   { hex: '#ffffff', description: 'Clear Color'}
 ]
