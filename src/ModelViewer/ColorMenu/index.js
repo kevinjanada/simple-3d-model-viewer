@@ -76,6 +76,7 @@ class ColorMenu {
       el.appendChild(text)
       const classContext = this
       el.addEventListener('click', function(event) {
+        event.preventDefault()
         classContext.menuItemClickHandler(c)
       })
       this.menuElement.appendChild(el)

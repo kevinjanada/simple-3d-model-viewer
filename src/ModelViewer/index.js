@@ -33,6 +33,8 @@ class ModelViewer {
     this.clickedObject = null;
     // To pause and start the animation
     this.animationHandle = null
+    // Flag to check if modelviewer is currently animating
+    this.isAnimating = false
     // Window Menu to show when mouse clicked at object
     this.colorMenu = null
     
@@ -49,6 +51,8 @@ class ModelViewer {
     this.handleClick = this.handleClick.bind(this)
     this.handleShowMenu = this.handleShowMenu.bind(this)
     this.handleMenuItemClick = this.handleMenuItemClick.bind(this)
+    this.handleMouseEnterCanvas = this.handleMouseEnterCanvas.bind(this)
+    this.handleMouseLeaveCanvas = this.handleMouseLeaveCanvas.bind(this)
 
     // Setup
     if(domElement) {
@@ -90,8 +94,8 @@ class ModelViewer {
     document.addEventListener('mousemove', this.setMouseWindowPosition)
     document.addEventListener('mouseout', this.clearMouseCanvasPosition)
     document.addEventListener('mouseleave', this.clearMouseCanvasPosition)
-    this.canvas.addEventListener('mouseenter', this.onMouseEnterCanvas) // TODO: Implement this
-    this.canvas.addEventListener('mouseleave', this.onMouseLeaveCanvas) // TODO: Implement this
+    this.canvas.addEventListener('mouseenter', this.handleMouseEnterCanvas) // TODO: Implement this
+    this.canvas.addEventListener('mouseleave', this.handleMouseLeaveCanvas) // TODO: Implement this
   }
 
   render () {
@@ -102,6 +106,7 @@ class ModelViewer {
   animate () {
     this.animationHandle = requestAnimationFrame(this.animate)
     this.render()
+    this.modelsDict['tanks'].x += 100
     this.orbitControls.update()
   }
 
@@ -288,6 +293,18 @@ class ModelViewer {
     event.preventDefault()
     this.setClickedObject()
     this.handleShowMenu()
+  }
+
+  handleMouseEnterCanvas() {
+    if (this.isAnimating === false) {
+      requestAnimationFrame(this.animate)
+      this.isAnimating = true
+    }
+  }
+
+  handleMouseLeaveCanvas() { // FIXME: cancelAnimationFrame not working, maybe not getting the right ID in this.animationHandle
+    this.isAnimating = false
+    cancelAnimationFrame(this.animationHandle)
   }
 }
 
