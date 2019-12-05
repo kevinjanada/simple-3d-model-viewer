@@ -37,6 +37,8 @@ class ModelViewer {
     this.isAnimating = false
     // Window Menu to show when mouse clicked at object
     this.colorMenu = null
+
+
     
     // Bind methods context to this
     this.animate = this.animate.bind(this)
@@ -53,6 +55,7 @@ class ModelViewer {
     this.handleMenuItemClick = this.handleMenuItemClick.bind(this)
     this.handleMouseEnterCanvas = this.handleMouseEnterCanvas.bind(this)
     this.handleMouseLeaveCanvas = this.handleMouseLeaveCanvas.bind(this)
+    this.drawLineAtPoint = this.drawLineAtPoint.bind(this)
 
     /* ==========================
      * Setup
@@ -82,6 +85,25 @@ class ModelViewer {
     this.raycaster = new THREE.Raycaster()
     this.colorMenu = new ColorMenu(this.canvas, null, this.handleMenuItemClick)
 
+
+    // TODO: Coba gambar garis di point mouse intersect
+    // FIXME: Nanti perlu dirapihin
+    this.geometry = new THREE.BufferGeometry();
+    this.geometry.setFromPoints( [ new THREE.Vector3(), new THREE.Vector3() ] );
+    this.mouseHelper = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 10), new THREE.MeshNormalMaterial());
+    this.mouseHelper.visible = false;
+    this.scene.add( this.mouseHelper );
+    this.line = new THREE.Line( this.geometry, new THREE.LineBasicMaterial() );
+    this.scene.add(this.line)
+    this.position = new THREE.Vector3();
+    this.intersection = {
+				intersects: false,
+				point: new THREE.Vector3(),
+				normal: new THREE.Vector3()
+			};
+    // ------------------------------------------------
+    
+
     // Event Listeners
     document.addEventListener('mousedown', this.handleMouseDown)
     document.addEventListener('mouseup', this.handleMouseUp)
@@ -94,7 +116,6 @@ class ModelViewer {
   }
 
   render () {
-    this.raycast()
     this.renderer.render(this.scene, this.camera)
     this.orbitControls.update()
     this.setLightToFollowCamera()
@@ -142,6 +163,7 @@ class ModelViewer {
     const pos = this.getCanvasRelativePosition(event);
     this.mouseCanvasPosition.x = (pos.x / this.canvas.clientWidth ) *  2 - 1;
     this.mouseCanvasPosition.y = (pos.y / this.canvas.clientHeight) * -2 + 1;  // note we flip Y
+    this.raycast()
   }
 
   /**
@@ -166,11 +188,30 @@ class ModelViewer {
     if (intersectedObjects.length > 0) {
       // pick the first object. It's the closest one
       this.intersectedObject = intersectedObjects[0].object;
-      // TODO: Add Outline Highlight to intersectedObject
+      const intersected = intersectedObjects[0]
+      this.drawLineAtPoint(intersected)
     } else {
-      // TODO: Remove Outline Highlight to intersectedObject
       this.intersectedObject = null;
     }
+  }
+
+  drawLineAtPoint (intersect) {
+    //console.log(intersect)
+    const point = intersect.point
+    console.log(`x: ${point.x}, y: ${point.y}, z: ${point.z}`)
+    this.mouseHelper.position.copy( point );
+    this.intersection.point.copy( point );
+    var n = intersect.face.normal.clone();
+    n.transformDirection( this.intersectedObject.matrixWorld );
+    n.multiplyScalar( 10 );
+    n.add(point);
+    this.intersection.normal.copy( intersect.face.normal );
+    this.mouseHelper.lookAt( n );
+    var positions = this.line.geometry.attributes.position;
+    positions.setXYZ( 0, point.x, point.y, point.z );
+    positions.setXYZ( 1, n.x, n.y, n.z );
+    positions.needsUpdate = true;
+    this.intersection.intersects = true;
   }
 
   setClickedObject() {
@@ -265,6 +306,7 @@ class ModelViewer {
     const model = await fbxModelLoader(modelPath)
     this.modelsDict[modelKey] = model
     this.setDefaultObjectMaterial(modelKey)
+    this.setDefaultRotation(modelKey)
     this.scene.add(model)
   }
 

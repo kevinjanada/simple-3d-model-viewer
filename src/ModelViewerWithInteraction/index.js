@@ -110,11 +110,11 @@ class ModelViewer {
    * @function setDefaultRotation -- Rotate 90 degrees on x axis. Perlu kalau export fbx langsung dari navisworks
    * @param {modelKey} string -- The key that was passed in to loadFBX method when loading the model 
   */
-  setDefaultRotation(modelKey) {
+  setDefaultRotation(model) {
     var quaternion = new THREE.Quaternion()
     // Rotate on x axis, -90 degrees or -(pi/2) radian
     quaternion.setFromAxisAngle(new THREE.Vector3(1,0,0), (Math.PI / 2) * -1)
-    this.modelsDict[modelKey].applyQuaternion(quaternion)
+    model.applyQuaternion(quaternion)
   }
 
   setDefaultObjectMaterial(object) {
@@ -137,15 +137,13 @@ class ModelViewer {
     object.on('click', event => {
       console.log('clicked object')
       const { target } = event.data
-      const object = target.children[0]
-      // FIXME: cuma test doang
-      object.material.color.setHex(0x00f2ff)
-      // TODO: Show Color Menu, to pick color to change the object
+      console.log(target)
     })
   }
 
   async loadFBX (modelPath) {
     const model = await fbxModelLoader(modelPath)
+    this.setDefaultRotation(model)
     this.setDefaultObjectMaterial(model)
     this.scene.add(model)
     this.setObjectInteraction(model)
