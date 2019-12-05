@@ -135,7 +135,12 @@ class ModelViewer {
   setObjectInteraction (object) {
     object.cursor = 'pointer'
     object.on('click', event => {
-      console.log(event)
+      console.log('clicked object')
+      const { target } = event.data
+      const object = target.children[0]
+      // FIXME: cuma test doang
+      object.material.color.setHex(0x00f2ff)
+      // TODO: Show Color Menu, to pick color to change the object
     })
   }
 
