@@ -4,6 +4,7 @@ import ModelViewer from './ModelViewer'
 //import testFBXModel from './models/test.fbx'
 // import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203-reset-origin.fbx'
 //import teaMug from './models/teamug.fbx'
+// import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/EXPANDER AP203.nwd.fbx'
 import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203.nwd.fbx'
 
 const elem = document.getElementById('model-viewer-canvas')

@@ -1,11 +1,6 @@
 import * as THREE from 'three'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
-import ColorMenu from './ColorMenu'
-
-function hexStringToInt(hexString) {
-  return parseInt(hexString.replace(/^#/, ''), 16)
-}
 
 class ModelViewer {
   /**
@@ -27,6 +22,8 @@ class ModelViewer {
     this.mouseCanvasPosition = {x: 0, y: 0};
     this.mouseWindowPosition = {x: 0, y: 0};
     this.mouseDownTimer = null;
+    // The point of intersection of the raycast
+    this.intersected = null;
     // The object currently raycasted
     this.intersectedObject = null;
     // The object that was last raycasted when click event fired
@@ -35,15 +32,12 @@ class ModelViewer {
     this.animationID = null
     // Flag to check if modelviewer is currently animating
     this.isAnimating = false
-    // Window Menu to show when mouse clicked at object
-    this.colorMenu = null
-
 
     
     // Bind methods context to this
     this.animate = this.animate.bind(this)
     this.raycast = this.raycast.bind(this)
-    this.markObject = this.markObject.bind(this)
+    this.setDefaultObjectMaterial = this.setDefaultObjectMaterial.bind(this)
     this.getCanvasRelativePosition = this.getCanvasRelativePosition.bind(this)
     this.setMouseCanvasPosition = this.setMouseCanvasPosition.bind(this)
     this.clearMouseCanvasPosition = this.clearMouseCanvasPosition.bind(this)
@@ -51,11 +45,10 @@ class ModelViewer {
     this.handleMouseDown = this.handleMouseDown.bind(this)
     this.handleMouseUp = this.handleMouseUp.bind(this)
     this.handleClick = this.handleClick.bind(this)
-    this.handleShowMenu = this.handleShowMenu.bind(this)
-    this.handleMenuItemClick = this.handleMenuItemClick.bind(this)
     this.handleMouseEnterCanvas = this.handleMouseEnterCanvas.bind(this)
     this.handleMouseLeaveCanvas = this.handleMouseLeaveCanvas.bind(this)
     this.drawLineAtPoint = this.drawLineAtPoint.bind(this)
+    this.getPointCoordinateOnObject = this.getPointCoordinateOnObject.bind(this)
 
     /* ==========================
      * Setup
@@ -72,7 +65,7 @@ class ModelViewer {
       this.canvasWidth = window.innerWidth - 20
       this.canvasHeight = window.innerHeight - 20
     }
-    this.camera = new THREE.PerspectiveCamera(120, this.canvasWidth / this.canvasHeight, 1, 1000)
+    this.camera = new THREE.PerspectiveCamera(120, this.canvasWidth / this.canvasHeight, 0.1, 1000)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x787878)
     this.light = new THREE.HemisphereLight(0xffffff, 0x080820, 0.7)
@@ -83,11 +76,12 @@ class ModelViewer {
     this.canvas.appendChild(this.renderer.domElement)
     this.orbitControls = initializeOrbitControls(this.camera, this.renderer)
     this.raycaster = new THREE.Raycaster()
-    this.colorMenu = new ColorMenu(this.canvas, null, this.handleMenuItemClick)
 
 
-    // TODO: Coba gambar garis di point mouse intersect
-    // FIXME: Nanti perlu dirapihin
+    /**
+     * Setup untuk method drawLineOnPoint()
+     * Untuk cari point titik di model
+     */
     this.geometry = new THREE.BufferGeometry();
     this.geometry.setFromPoints( [ new THREE.Vector3(), new THREE.Vector3() ] );
     this.mouseHelper = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 10), new THREE.MeshNormalMaterial());
@@ -134,7 +128,7 @@ class ModelViewer {
 
   /**
    * Set the mouse position relative to the window position
-   * @param {DOMEvent object} event 
+   * @param {DOMEvent object} event
    */
   setMouseWindowPosition(event) {
     event.preventDefault()
@@ -162,7 +156,7 @@ class ModelViewer {
    */
   setMouseCanvasPosition(event) {
     const pos = this.getCanvasRelativePosition(event);
-    this.mouseCanvasPosition.x = (pos.x / this.canvas.clientWidth ) *  2 - 1;
+    this.mouseCanvasPosition.x = (pos.x / this.canvas.clientWidth ) *  2 - 1 + 0.012;
     this.mouseCanvasPosition.y = (pos.y / this.canvas.clientHeight) * -2 + 1;  // note we flip Y
     this.raycast()
   }
@@ -189,8 +183,8 @@ class ModelViewer {
     if (intersectedObjects.length > 0) {
       // pick the first object. It's the closest one
       this.intersectedObject = intersectedObjects[0].object;
-      const intersected = intersectedObjects[0]
-      this.drawLineAtPoint(intersected)
+      this.intersected = intersectedObjects[0]
+      this.drawLineAtPoint(this.intersected)
     } else {
       this.intersectedObject = null;
     }
@@ -198,13 +192,11 @@ class ModelViewer {
 
   drawLineAtPoint (intersect) {
     const point = intersect.point
-    // console.log(`x: ${point.x}, y: ${point.y}, z: ${point.z}`)
     this.mouseHelper.position.copy( point );
     this.intersection.point.copy( point );
     var n = intersect.face.normal.clone();
-    // console.log(n)
     n.transformDirection( this.intersectedObject.matrixWorld );
-    n.multiplyScalar( 3);
+    n.multiplyScalar(2);
     n.add(point);
     this.intersection.normal.copy( intersect.face.normal );
     this.mouseHelper.lookAt( n );
@@ -213,53 +205,32 @@ class ModelViewer {
     positions.setXYZ( 1, n.x, n.y, n.z );
     positions.needsUpdate = true;
     this.intersection.intersects = true;
+    // TODO: Save point to database
   }
 
-  setClickedObject() {
-    if(this.intersectedObject && !this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
-      this.clickedObject = this.intersectedObject
-      console.log(this.clickedObject)
-    } else {
-      if (!this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
-        this.clickedObject = null
-      }
-    }
-  }
-
-  handleShowMenu() {
+  /**
+   * If Mouse raycast is currently intersecting object,
+   * return the point coordinate of intersection
+   */
+  getPointCoordinateOnObject() {
     if (this.intersectedObject) {
-      this.colorMenu.show(this.mouseWindowPosition)
-    } else {
-      // FIXME: Maybe this if logic should be in ColorMenu class instead
-      if (!this.colorMenu.isMouseOnMenu(this.mouseWindowPosition)) {
-        this.colorMenu.hide()
-      }
-    }
-  }
-
-  handleMenuItemClick(val) {
-    const hex = hexStringToInt(val.hex)
-    this.markObject(hex)
-  }
-
-  markObject(color) {
-    if (this.clickedObject) {
-      this.clickedObject.material.color.setHex(color)
+      console.log(this.intersected.point)
+      return this.intersected.point
     }
   }
 
   centerCameraToObject(modelKey, offset) {
-    offset = offset || 1;
+    offset = offset || 0;
     const boundingBox = new THREE.Box3()
     const object = this.modelsDict[modelKey]
     boundingBox.setFromObject(object)
     const center = boundingBox.getCenter()
     const size = boundingBox.getSize()
-    this.camera.position.z = center.z + (size.z / 2)
-    this.camera.position.x = center.x + (size.x / 2)
+    this.camera.position.z = center.z
+    this.camera.position.x = center.x + size.x + offset
+    this.camera.position.y = center.y + size.y + offset
     this.camera.far = this.camera.far + 100
     this.camera.updateProjectionMatrix();
-    this.light.position.copy(center)
     if (this.orbitControls) {
       // set camera to rotate around center of loaded object
       this.orbitControls.target = center;
@@ -297,6 +268,7 @@ class ModelViewer {
 
   async loadFBX (modelPath, modelKey) {
     const model = await fbxModelLoader(modelPath)
+    console.log(model)
     this.modelsDict[modelKey] = model
     this.setDefaultObjectMaterial(modelKey)
     this.setDefaultRotation(modelKey)
@@ -317,7 +289,6 @@ class ModelViewer {
       this.handleClick(event)
     } else {
       // Mouse is held down
-      this.colorMenu.hide()
     }
   }
 
@@ -327,8 +298,7 @@ class ModelViewer {
    */
   handleClick(event) {
     event.preventDefault()
-    this.setClickedObject()
-    this.handleShowMenu()
+    this.getPointCoordinateOnObject()
   }
 
   handleMouseEnterCanvas() {
