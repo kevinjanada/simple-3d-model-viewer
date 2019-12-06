@@ -2,11 +2,7 @@ import * as THREE from 'three'
 import { Interaction } from 'three.interaction'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
-//import ColorMenu from './ColorMenu'
-
-function hexStringToInt(hexString) {
-  return parseInt(hexString.replace(/^#/, ''), 16)
-}
+import MousePositionManager from './MousePositionManager'
 
 class ModelViewer {
   /**
@@ -23,11 +19,19 @@ class ModelViewer {
     this.renderer = null;
     this.orbitControls = null;
     this.interactionManager = null;
+    this.mousePositionManager = null;
     this.isAnimating = false;
+    this.raycaster = null;
+    // The point of intersection of the raycast
+    this.intersected = null;
+    // To pause and start the animation
+    this.animationID = null
+    // Flag to check if modelviewer is currently animating
+    this.isAnimating = false
 
     this.animate = this.animate.bind(this)
-    this.handleMouseEnterCanvas = this.handleMouseEnterCanvas.bind(this)
-    this.handleMouseLeaveCanvas = this.handleMouseLeaveCanvas.bind(this)
+    this.drawLineAtPoint = this.drawLineAtPoint.bind(this)
+    this.raycast = this.raycast.bind(this)
 
     /* ==========================
      * Setup
@@ -54,11 +58,30 @@ class ModelViewer {
     this.renderer.setSize(this.canvasWidth, this.canvasHeight)
     this.canvas.appendChild(this.renderer.domElement)
     this.orbitControls = initializeOrbitControls(this.camera, this.renderer)
+    this.raycaster = new THREE.Raycaster()
     this.interactionManager = new Interaction(this.renderer, this.scene, this.camera)
+    this.mousePositionManager = new MousePositionManager(this.canvas)
 
-    // Event Listeners
-    this.canvas.addEventListener('mouseenter', this.handleMouseEnterCanvas) // TODO: Implement this
-    this.canvas.addEventListener('mouseleave', this.handleMouseLeaveCanvas) // TODO: Implement this
+    /**
+     * Setup untuk method drawLineOnPoint()
+     * Untuk cari point titik di model
+     */
+    this.mousePositionManager.on('mousemove', this.raycast)
+    this.geometry = new THREE.BufferGeometry();
+    this.geometry.setFromPoints( [ new THREE.Vector3(), new THREE.Vector3() ] );
+    this.mouseHelper = new THREE.Mesh(new THREE.BoxBufferGeometry(1, 1, 10), new THREE.MeshNormalMaterial());
+    this.mouseHelper.visible = false;
+    this.scene.add( this.mouseHelper );
+    this.line = new THREE.Line( this.geometry, new THREE.LineBasicMaterial() );
+    this.line.frustumCulled = false; // This need to be set to true, otherwise, line wont appear on certain angles
+    this.scene.add(this.line)
+    this.position = new THREE.Vector3();
+    this.intersection = {
+      intersects: false,
+      point: new THREE.Vector3(),
+      normal: new THREE.Vector3()
+    };
+    // ------------------------------------------------
   }
 
   render () {
@@ -78,31 +101,23 @@ class ModelViewer {
   }
 
   centerCameraToObject(model, offset) {
-    offset = offset || 5;
+    offset = offset || 0;
     const boundingBox = new THREE.Box3()
     const object = model
     boundingBox.setFromObject(object)
     const center = boundingBox.getCenter()
     const size = boundingBox.getSize()
-    
-    // get the max side of the bounding box (fits to width OR height as needed )
-    const maxDim = Math.max( size.x, size.y, size.z );
-    const fov = this.camera.fov * ( Math.PI / 180 );
-    let cameraZ = Math.abs( maxDim / 4 * Math.tan( fov * 2 ) );
-    cameraZ *= offset; // zoom out a little so that objects don't fill the screen
-    this.camera.position.z = center.z + cameraZ
-    const minZ = boundingBox.min.z;
-    const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
-    this.camera.far = cameraToFarEdge * 10;
+    this.camera.position.z = center.z
+    this.camera.position.x = center.x + size.x + offset
+    this.camera.position.y = center.y + size.y + offset
+    this.camera.far = this.camera.far + 100
     this.camera.updateProjectionMatrix();
-    if ( this.orbitControls ) {
+    if (this.orbitControls) {
       // set camera to rotate around center of loaded object
       this.orbitControls.target = center;
-      // prevent camera from zooming out far enough to create far plane cutoff
-      this.orbitControls.maxDistance = cameraToFarEdge * 10;
       this.orbitControls.saveState();
     } else {
-      this.camera.lookAt( center )
+      this.camera.lookAt(center)
     }
   }
   
@@ -136,8 +151,14 @@ class ModelViewer {
     object.cursor = 'pointer'
     object.on('click', event => {
       console.log('clicked object')
-      const { target } = event.data
-      console.log(target)
+      const { data, intersects } = event
+      // This is the clicked object
+      const { target } = data
+      // This is the point where the cursor is at the object face
+      const intersectPoint = this.getPointCoordinate(intersects[0])
+      console.log(`This is the object:`, target)
+      console.log(`This is the cursor coordinate: `, intersectPoint)
+      // TODO: Save intersect Point to database
     })
   }
 
@@ -150,16 +171,47 @@ class ModelViewer {
     return model
   }
 
-  handleMouseEnterCanvas() {
-    if (this.isAnimating === false) {
-      this.animationID = requestAnimationFrame(this.animate)
-      this.isAnimating = true
+  /**
+   * Cast ray from mouse position to detect closest object at mouse position
+   */
+  raycast() {
+    const { mouseCanvasPosition } = this.mousePositionManager.getPosition()
+    // cast a ray through the frustum
+    this.raycaster.setFromCamera(mouseCanvasPosition, this.camera);
+   // get the list of objects the ray intersected
+    const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
+    if (intersectedObjects.length > 0) {
+      // pick the first object. It's the closest one
+      this.intersected = intersectedObjects[0]
+      this.drawLineAtPoint(this.intersected)
+    } else {
+      this.intersectedObject = null;
     }
   }
 
-  handleMouseLeaveCanvas() { // FIXME: cancelAnimationFrame not working, maybe not getting the right ID in this.animationID
-    this.isAnimating = false
-    cancelAnimationFrame(this.animationID)
+  /**
+   * Draw a line from face of object, to indicate cursor raycasted point on object
+   * @param {object} intersect - The intersect from raycast()
+   */
+  drawLineAtPoint (intersect) {
+    const point = intersect.point
+    this.mouseHelper.position.copy( point );
+    this.intersection.point.copy( point );
+    var n = intersect.face.normal.clone();
+    n.transformDirection( intersect.object.matrixWorld );
+    n.multiplyScalar(2);
+    n.add(point);
+    this.intersection.normal.copy( intersect.face.normal );
+    this.mouseHelper.lookAt( n );
+    var positions = this.line.geometry.attributes.position;
+    positions.setXYZ( 0, point.x, point.y, point.z );
+    positions.setXYZ( 1, n.x, n.y, n.z );
+    positions.needsUpdate = true;
+    this.intersection.intersects = true;
+  }
+
+  getPointCoordinate (intersect) {
+    return intersect.point
   }
 }
 
