@@ -72,7 +72,7 @@ class ModelViewer {
       this.canvasWidth = window.innerWidth - 20
       this.canvasHeight = window.innerHeight - 20
     }
-    this.camera = new THREE.PerspectiveCamera(70, this.canvasWidth / this.canvasHeight, 1, 500)
+    this.camera = new THREE.PerspectiveCamera(120, this.canvasWidth / this.canvasHeight, 1, 1000)
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x787878)
     this.light = new THREE.HemisphereLight(0xffffff, 0x080820, 0.7)
@@ -94,13 +94,14 @@ class ModelViewer {
     this.mouseHelper.visible = false;
     this.scene.add( this.mouseHelper );
     this.line = new THREE.Line( this.geometry, new THREE.LineBasicMaterial() );
+    this.line.frustumCulled = false; // This need to be set to true, otherwise, line wont appear on certain angles
     this.scene.add(this.line)
     this.position = new THREE.Vector3();
     this.intersection = {
-				intersects: false,
-				point: new THREE.Vector3(),
-				normal: new THREE.Vector3()
-			};
+      intersects: false,
+      point: new THREE.Vector3(),
+      normal: new THREE.Vector3()
+    };
     // ------------------------------------------------
     
 
@@ -116,9 +117,9 @@ class ModelViewer {
   }
 
   render () {
-    this.renderer.render(this.scene, this.camera)
     this.orbitControls.update()
     this.setLightToFollowCamera()
+    this.renderer.render(this.scene, this.camera)
   }
 
   animate () {
@@ -196,14 +197,14 @@ class ModelViewer {
   }
 
   drawLineAtPoint (intersect) {
-    //console.log(intersect)
     const point = intersect.point
-    console.log(`x: ${point.x}, y: ${point.y}, z: ${point.z}`)
+    // console.log(`x: ${point.x}, y: ${point.y}, z: ${point.z}`)
     this.mouseHelper.position.copy( point );
     this.intersection.point.copy( point );
     var n = intersect.face.normal.clone();
+    // console.log(n)
     n.transformDirection( this.intersectedObject.matrixWorld );
-    n.multiplyScalar( 10 );
+    n.multiplyScalar( 3);
     n.add(point);
     this.intersection.normal.copy( intersect.face.normal );
     this.mouseHelper.lookAt( n );
@@ -248,31 +249,23 @@ class ModelViewer {
   }
 
   centerCameraToObject(modelKey, offset) {
-    offset = offset || 5;
+    offset = offset || 1;
     const boundingBox = new THREE.Box3()
     const object = this.modelsDict[modelKey]
     boundingBox.setFromObject(object)
     const center = boundingBox.getCenter()
     const size = boundingBox.getSize()
-    
-    // get the max side of the bounding box (fits to width OR height as needed )
-    const maxDim = Math.max( size.x, size.y, size.z );
-    const fov = this.camera.fov * ( Math.PI / 180 );
-    let cameraZ = Math.abs( maxDim / 4 * Math.tan( fov * 2 ) );
-    cameraZ *= offset; // zoom out a little so that objects don't fill the screen
-    this.camera.position.z = center.z + cameraZ
-    const minZ = boundingBox.min.z;
-    const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
-    this.camera.far = cameraToFarEdge * 10;
+    this.camera.position.z = center.z + (size.z / 2)
+    this.camera.position.x = center.x + (size.x / 2)
+    this.camera.far = this.camera.far + 100
     this.camera.updateProjectionMatrix();
-    if ( this.orbitControls ) {
+    this.light.position.copy(center)
+    if (this.orbitControls) {
       // set camera to rotate around center of loaded object
       this.orbitControls.target = center;
-      // prevent camera from zooming out far enough to create far plane cutoff
-      this.orbitControls.maxDistance = cameraToFarEdge * 10;
       this.orbitControls.saveState();
     } else {
-      this.camera.lookAt( center )
+      this.camera.lookAt(center)
     }
   }
   
@@ -293,7 +286,7 @@ class ModelViewer {
         // switch the material here - you'll need to take the settings from the 
         //original material, or create your own new settings, something like:
         const oldMat = child.material;
-        child.material = new THREE.MeshLambertMaterial({  
+        child.material = new THREE.MeshLambertMaterial({
           color: 0xFFFFFF,
           map: oldMat.map,
           //etc

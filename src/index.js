@@ -1,10 +1,8 @@
-import * as THREE from 'three'
-
 import ModelViewer from './ModelViewer'
 //import ModelViewer from './ModelViewerWithInteraction'
 //import PA0121_01 from './models/PA0121.01.fbx'
 //import testFBXModel from './models/test.fbx'
-//import modelResetOrigin from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203-reset-origin.fbx'
+// import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203-reset-origin.fbx'
 //import teaMug from './models/teamug.fbx'
 import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203.nwd.fbx'
 
@@ -15,7 +13,7 @@ elem.style.height = '600px'
 const modelViewer = new ModelViewer(elem)
 const main = async () => {
   await modelViewer.loadFBX(DWS, 'DWS')
-  modelViewer.centerCameraToObject('DWS', 8)
+  modelViewer.centerCameraToObject('DWS')
   modelViewer.animate()
 }
 
