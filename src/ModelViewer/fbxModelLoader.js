@@ -1,4 +1,5 @@
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader'
+const THREE = require('three');
 
 let loader = new FBXLoader()
 /*
@@ -7,7 +8,11 @@ let loader = new FBXLoader()
  * @returns {promise} resolve to model object
  * */
 const fbxModelLoader = (modelPath) => new Promise((resolve, reject) => {
+  console.log(modelPath)
+  const baseURL = THREE.LoaderUtils.extractUrlBase(modelPath);
+  console.log(baseURL)
   if (!loader) { loader = new FBXLoader() }
+  loader.setCrossOrigin('anonymous');
   loader.load(modelPath, model => {
     resolve(model)
   }, progress => {

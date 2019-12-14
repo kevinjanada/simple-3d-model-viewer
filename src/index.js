@@ -1,5 +1,5 @@
-// import ModelViewer from './ModelViewer'
-import ModelViewer from './ModelViewerWithInteraction'
+import ModelViewer from './ModelViewer'
+// import ModelViewer from './ModelViewerWithInteraction'
 //import PA0121_01 from './models/PA0121.01.fbx'
 //import testFBXModel from './models/test.fbx'
 // import DWS from './models/3D/EXPANDER_EXPELLER_Line02.nwd/DWS step203-reset-origin.fbx'
@@ -18,7 +18,7 @@ elem.style.height = '600px'
 //   modelViewer.animate()
 // }
 
-const modelViewer = new ModelViewer(elem)
+const modelViewer = new ModelViewer(elem, { editMode: true })
 const main = async () => {
   const model = await modelViewer.loadFBX(DWS)
   modelViewer.centerCameraToObject(model)
