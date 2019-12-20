@@ -375,7 +375,8 @@ class ModelViewer {
       console.log(pointCoordinate)
       if (this.editMode) {
         if (!this.intersectedPoint) {
-          this.drawSphereAtPoint(pointCoordinate)
+          //this.drawSphereAtPoint(pointCoordinate)
+          this.drawCrossAtPoint(this.intersects[0], pointCoordinate)
         }
       }
 
@@ -435,6 +436,26 @@ class ModelViewer {
     }
     this.savedSpheres[name] = this.tempSphere
     this.tempSphere = null
+  }
+
+  drawCrossAtPoint(intersect, pointCoordinate) {
+    var rectOneGeom = new THREE.BoxGeometry(0.05, 0.1, 0.4)
+    rectOneGeom.rotateY((Math.PI / 4))
+    var rectTwoGeom = new THREE.BoxGeometry(0.05, 0.1, 0.4)
+    rectTwoGeom.rotateY((Math.PI / 4) * -1)
+    rectOneGeom.merge(rectTwoGeom)
+    var material = new THREE.MeshBasicMaterial({color: 0x00ff00})
+    var cross = new THREE.Mesh(rectOneGeom, material)
+
+    this.scene.add(cross)
+    
+    const {x, y, z} = pointCoordinate
+    cross.position.setX(x)
+    cross.position.setY(y)
+    cross.position.setZ(z)
+
+    this.camera.updateProjectionMatrix()
+    this.orbitControls.update()
   }
 
   /**
