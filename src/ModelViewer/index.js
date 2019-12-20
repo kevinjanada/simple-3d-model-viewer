@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import fbxModelLoader from './fbxModelLoader'
 import initializeOrbitControls from './initializeOrbitControls'
 import MouseInteractionManager from './MouseInteractionManager'
+import Cross from './Shapes/Cross'
 
 class ModelViewer {
   /**
@@ -34,6 +35,12 @@ class ModelViewer {
     this.tempSphere = null
     // Dictionary of saved Spheres made during editing
     this.savedSpheres = {}
+    // Marker that is intersected during raycasting
+    this.intersectedMarker = null
+    // Marker Currently Being Edited
+    this.tempMarker = null
+    // Dictionary of saved Markers made during editing
+    this.savedMarkers = {}
     // Attached Object to mouse (for dragging)
     this.objectAttachedToMouse = null
 
@@ -45,21 +52,24 @@ class ModelViewer {
     this.centerCameraToObject = this.centerCameraToObject.bind(this)
     this.setDefaultObjectMaterial = this.setDefaultObjectMaterial.bind(this)
     this.centerCameraToObject = this.centerCameraToObject.bind(this)
-    this.setObjectInteraction = this.setObjectInteraction.bind(this)
     this.getPointCoordinate = this.getPointCoordinate.bind(this)
-    this.drawSphereAtPoint = this.drawSphereAtPoint.bind(this)
-    this.removeSphereAtPoint = this.removeSphereAtPoint.bind(this)
-    this.removeTempSphere = this.removeTempSphere.bind(this)
-    this.saveSphere = this.saveSphere.bind(this)
-    this.dragSphere = this.dragSphere.bind(this)
-    this.dragFinished = this.dragFinished.bind(this)
     this.setObjectColor = this.setObjectColor.bind(this)
+
+    // Marker Editing Methods
+    this.drawMarker = this.drawMarker.bind(this)
+    this.saveMarker = this.saveMarker.bind(this)
+    this.removeTempMarker = this.removeTempMarker.bind(this)
+    this.removeMarker = this.removeMarker.bind(this)
+    this.dragMarker = this.dragMarker.bind(this)
+    this.dragFinished = this.dragFinished.bind(this)
+    this.checkForMarker = this.checkForMarker.bind(this)
+
+
     /** 
      * FIXME: Method sementara untuk demo
      * */ 
     this.drawPointsForDemo = this.drawPointsForDemo.bind(this)
     /** */
-    this.checkForPoint = this.checkForPoint.bind(this)
 
     // Setup Callback Handlers -- Register callback function from outside
     this.onClickHandler = () => null
@@ -97,7 +107,7 @@ class ModelViewer {
     this.raycaster = new THREE.Raycaster()
     this.mouseInteractionManager = new MouseInteractionManager(this.canvas)
     this.mouseInteractionManager.on('click', this.clickObject)
-    this.mouseInteractionManager.on('drag', this.dragSphere)
+    this.mouseInteractionManager.on('drag', this.dragMarker)
     this.mouseInteractionManager.on('drag-finished', this.dragFinished)
 
     /**
@@ -224,19 +234,6 @@ class ModelViewer {
     })
   }
 
-  // FIXME: Interaksi pake library three.interaction blom bisa jalan di VUE
-  setObjectInteraction (object) {
-    object.cursor = 'pointer'
-    object.on('click', event => {
-      const { data, intersects } = event
-      // This is the clicked object
-      const { target } = data
-      // This is the point where the cursor is at the object face
-      const intersectPoint = this.getPointCoordinate(intersects[0])
-      // TODO: Save intersect Point to database
-    })
-  }
-
   // FIXME: Di VUE blom tau caranya untuk Load pake ini, Harus return Promise
   async loadFBX (modelPath) {
     const model = await fbxModelLoader(modelPath)
@@ -244,7 +241,6 @@ class ModelViewer {
     this.setDefaultObjectMaterial(model)
     this.scene.add(model)
     return model
-    // this.setObjectInteraction(model)
     // return model
   }
 
@@ -273,8 +269,6 @@ class ModelViewer {
       }
       this.scene.add(model)
       
-      // FIXME: setObjectInteraction pake library three.interaction ga bisa jalan di vue
-      // this.setObjectInteraction(model)
       resolve(model)
     })
   }
@@ -309,7 +303,7 @@ class ModelViewer {
     if (this.intersects.length > 0) {
       // pick the first object. It's the closest one
       this.drawLineAtPoint(this.intersects[0])
-      this.checkForPoint(this.intersects[0])
+      this.checkForMarker(this.intersects[0])
     }
   }
 
@@ -325,20 +319,73 @@ class ModelViewer {
     return res;
   }
 
-  dragSphere() {
-    if (this.intersectedPoint && this.objectAttachedToMouse === null) {
-      this.objectAttachedToMouse = this.intersectedPoint
+  drawMarker(intersect, pointCoordinate) {
+    const marker = new Cross(0.3, 0x00ff00)
+    console.log(marker)
+    marker.name = pointCoordinate.name
+                  ? pointCoordinate.name
+                  : ('' + pointCoordinate.x + pointCoordinate.y + pointCoordinate.z)
+    if(pointCoordinate.pointId){
+      marker.userData.pointId = 'pointId_' + pointCoordinate.pointId 
     }
+    //marker.renderOrder = 1
+    this.tempMarker = marker
+    this.scene.add(marker)
 
+    const quaternion = this.getFaceNormalAngle(intersect)
+    
+    const {x, y, z} = pointCoordinate
+    marker.position.setX(x)
+    marker.position.setY(y)
+    marker.position.setZ(z)
+    marker.applyQuaternion(quaternion)
+
+    this.camera.updateProjectionMatrix()
+    this.orbitControls.update()
+  }
+  saveMarker({pointId}) {
+    const { name } = this.tempMarker.name
+    if(pointId){
+      this.tempMarker.userData.pointId = 'pointId_' + pointId
+    }
+    this.saveMarker[name] = this.tempMarker
+    this.tempMarker = null
+  }
+  removeTempMarker() {
+    this.scene.remove(this.tempMarker)
+    this.tempMarker = null
+  }
+  removeMarker(pointCoordinate) {
+    const markerName = '' + pointCoordinate.x + pointCoordinate.y + pointCoordinate.z
+    const marker = this.scene.getObjectByName(markerName)
+    this.scene.remove(marker)
+  }
+  checkForMarker(intersect) {
+    if (intersect && intersect.object instanceof Cross) {
+      const { mouseWindowPosition } = this.mouseInteractionManager.getPosition()
+      const data = { intersect, mouseWindowPosition }
+      this.hoverOnPointHandler(data)
+      this.intersectedMarker = intersect
+    } else {
+      this.hoverOnPointHandler(false)
+      this.intersectedMarker = null
+    }
+  }
+  dragMarker() {
+    if (this.intersectedMarker && this.objectAttachedToMouse === null) {
+      this.objectAttachedToMouse = this.intersectedMarker
+    }
     if (this.objectAttachedToMouse) {
-      console.log('dragging a sphere')
-      if (this.intersects[1]) {
-        const { x, y, z } = this.intersects[1].point
+      if (this.intersects.length > 0) {
+        const intersect = this.intersects.filter(i => !(i.object instanceof Cross))[0]
+        const { x, y, z } = intersect.point
         this.orbitControls.enabled = false
         // Object that the sphere is attached to
         this.objectAttachedToMouse.object.position.setX(x)
         this.objectAttachedToMouse.object.position.setY(y)
         this.objectAttachedToMouse.object.position.setZ(z)
+        const quaternion = this.getFaceNormalAngle(intersect)
+        this.objectAttachedToMouse.object.applyQuaternion(quaternion)
         this.objectAttachedToMouse.object.updateMatrix()
         this.objectAttachedToMouse.object.geometry.computeBoundingSphere()
         this.camera.updateProjectionMatrix()
@@ -346,24 +393,9 @@ class ModelViewer {
       }
     }
   }
-
   dragFinished() {
     this.orbitControls.enabled = true
     this.objectAttachedToMouse = null
-    console.log(this.objectAttachedToMouse)
-  }
-
-  checkForPoint(intersect) {
-    if (intersect && intersect.object.geometry instanceof THREE.SphereGeometry) {
-      console.log('Found a point!')
-      const { mouseWindowPosition } = this.mouseInteractionManager.getPosition()
-      const data = { intersect, mouseWindowPosition }
-      this.hoverOnPointHandler(data)
-      this.intersectedPoint = intersect
-    } else {
-      this.hoverOnPointHandler(false)
-      this.intersectedPoint = null
-    }
   }
 
   /**
@@ -372,11 +404,9 @@ class ModelViewer {
   clickObject() {
     if (this.intersects.length > 0) {
       const pointCoordinate = this.getPointCoordinate(this.intersects[0])
-      console.log(pointCoordinate)
       if (this.editMode) {
-        if (!this.intersectedPoint) {
-          //this.drawSphereAtPoint(pointCoordinate)
-          this.drawCrossAtPoint(this.intersects[0], pointCoordinate)
+        if (!this.intersectedMarker) {
+          this.drawMarker(this.intersects[0], pointCoordinate)
         }
       }
 
@@ -391,72 +421,10 @@ class ModelViewer {
       this.onClickHandler(parameters)
     } else {
       this.onClickHandler(false)
-      this.removeTempSphere()
+      this.removeTempMarker()
     }
   }
 
-  // FIXME: Gambar titik di objek, masi ada bug, titik nya kerender cuma kalo distance camera ke objek sekitar 2 - 3. 
-  // kalo jauh, titik nya ga ke render
-  drawSphereAtPoint(pointCoordinate) {
-    console.log(pointCoordinate)
-    var geometry = new THREE.SphereGeometry(pointCoordinate.r ? pointCoordinate.r : 0.2)
-    var material = new THREE.MeshBasicMaterial({ color: pointCoordinate.color ? pointCoordinate.color : 0xffff00 })
-    var sphere = new THREE.Mesh(geometry, material)
-    // const sphereName = '' + pointCoordinate.x + pointCoordinate.y + pointCoordinate.z
-    sphere.name = pointCoordinate.name ? pointCoordinate.name : ('' + pointCoordinate.x + pointCoordinate.y + pointCoordinate.z)
-    // sphere.name = sphereName
-    if(pointCoordinate.pointId){
-      sphere.userData.pointId = 'pointId_' + pointCoordinate.pointId 
-    }
-    sphere.renderOrder = 1
-    this.tempSphere = sphere
-    this.scene.add(sphere)
-    sphere.position.setX(pointCoordinate.x)
-    sphere.position.setY(pointCoordinate.y)
-    sphere.position.setZ(pointCoordinate.z)
-    this.camera.updateProjectionMatrix()
-    this.orbitControls.update()
-  }
-
-  removeSphereAtPoint(pointCoordinate) {
-    const sphereName = '' + pointCoordinate.x + pointCoordinate.y + pointCoordinate.z
-    const sphere = this.scene.getObjectByName(sphereName)
-    this.scene.remove(sphere)
-  }
-
-  removeTempSphere() {
-    this.scene.remove(this.tempSphere)
-    this.tempSphere = null
-  }
-
-  saveSphere({pointId}) {
-    const { name } = this.tempSphere.name
-    if(pointId){
-      this.tempSphere.userData.pointId = 'pointId_' + pointId
-    }
-    this.savedSpheres[name] = this.tempSphere
-    this.tempSphere = null
-  }
-
-  drawCrossAtPoint(intersect, pointCoordinate) {
-    var rectOneGeom = new THREE.BoxGeometry(0.05, 0.1, 0.4)
-    rectOneGeom.rotateY((Math.PI / 4))
-    var rectTwoGeom = new THREE.BoxGeometry(0.05, 0.1, 0.4)
-    rectTwoGeom.rotateY((Math.PI / 4) * -1)
-    rectOneGeom.merge(rectTwoGeom)
-    var material = new THREE.MeshBasicMaterial({color: 0x00ff00})
-    var cross = new THREE.Mesh(rectOneGeom, material)
-
-    this.scene.add(cross)
-    
-    const {x, y, z} = pointCoordinate
-    cross.position.setX(x)
-    cross.position.setY(y)
-    cross.position.setZ(z)
-
-    this.camera.updateProjectionMatrix()
-    this.orbitControls.update()
-  }
 
   /**
    * Draw a line from face of object, to indicate cursor raycasted point on object
@@ -477,6 +445,30 @@ class ModelViewer {
     positions.setXYZ( 1, n.x, n.y, n.z );
     positions.needsUpdate = true;
     this.intersection.intersects = true;
+  }
+
+  getFaceNormalAngle(intersect) {
+    // point === Vector3
+    // n === Vector3
+    const point = intersect.point
+    var n = intersect.face.normal.clone();
+    n.transformDirection( intersect.object.matrixWorld );
+    n.multiplyScalar(1);
+    n.add(point);
+    n.name = "face-normal"
+    
+    const xDiff = Math.abs(n.x - point.x)
+    const yDiff = Math.abs(n.y - point.y)
+    const zDiff = Math.abs(n.z - point.z)
+
+    // FIXME: Kalkulasi quaternion masih salah. X nya menghadap ke arah yang salah
+    let quaternion = new THREE.Quaternion()
+    quaternion.setFromAxisAngle(new THREE.Vector3(xDiff, yDiff, zDiff), (Math.PI / 2))
+    quaternion = quaternion.normalize()
+
+    console.log(quaternion)
+
+    return quaternion
   }
 
   /**
